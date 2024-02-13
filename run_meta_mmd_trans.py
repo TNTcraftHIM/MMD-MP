@@ -39,12 +39,12 @@ import nltk
 pattern = re.compile(r"<extra_id_\d+>")
 
 model_path_dit={
-    'gpt2': '/mnt/cephfs/dataset/zhangshuhai/backup20240107/detect-gpt-tmp/pretrain_model/gpt2',
-	'roberta-base-openai-detector': '/mnt/cephfs/dataset/zhangshuhai/backup20240107/detect-gpt-tmp/pretrain_model/roberta-base-openai-detector',
-	'EleutherAI/gpt-neo-125m':'/mnt/cephfs/dataset/zhangshuhai/backup20240107/detect-gpt-tmp/pretrain_model/gpt-neo-125m',
-	'minhtoan/gpt3-small-finetune-cnndaily-news':'/mnt/cephfs/dataset/zhangshuhai/backup20240107/detect-gpt-tmp/pretrain_model/gpt3-small-finetune-cnndaily-news',
-	't5-large':'/mnt/cephfs/dataset/zhangshuhai/backup20240107/detect-gpt-tmp/pretrain_model/t5-large',
-	't5-small':'/mnt/cephfs/dataset/zhangshuhai/backup20240107/detect-gpt-tmp/pretrain_model/t5-small',
+    'gpt2': 'pretrained_models/gpt2-medium',
+	'roberta-base-openai-detector': 'pretrained_models/roberta-base-openai-detector',
+	'EleutherAI/gpt-neo-125m':'pretrained_models/gpt-neo-125m',
+	'minhtoan/gpt3-small-finetune-cnndaily-news':'pretrained_models/gpt3-small-finetune-cnndaily-news',
+	't5-large':'pretrained_models/t5-large',
+	't5-small':'pretrained_models/t5-small',
 }
 
 def plot_mi(clean, adv):
