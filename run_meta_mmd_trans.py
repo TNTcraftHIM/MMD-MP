@@ -756,7 +756,7 @@ if __name__ == '__main__':
 	parser.add_argument('--pre_perturb_span_length', type=int, default=5)
 	parser.add_argument('--random_fills', action='store_true')
 	parser.add_argument('--random_fills_tokens', action='store_true')
-	parser.add_argument('--cache_dir', type=str, default="./~/.cache")
+	parser.add_argument('--cache_dir', type=str, default=".cache")
 	args = parser.parse_args()
 
 	PATH_exper = 'two_sample_test'
@@ -929,6 +929,7 @@ if __name__ == '__main__':
 				real = data['original']#[:args.train_real_num]  len== n_samples, many sentences of words
 				generated = data['sampled']#[:args.train_real_num]
 				if args.two_sample_test:
+					nltk.download('punkt')
 					real_sent_token = [nltk.sent_tokenize(text)[1:-1] for text in real ]
 					generated_sent_token = [nltk.sent_tokenize(text)[1:-1] for text in generated ]
 					real = [text for text in real_sent_token if len(text)>0]

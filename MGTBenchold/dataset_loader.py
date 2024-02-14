@@ -12,7 +12,7 @@ DATASETS = ['meta_HC3', 'HC3', 'TruthfulQA', 'SQuAD1', 'SQuAD2',
 			'NarrativeQA', "TruthfulQA_adv1", "TruthfulQA_adv2"]
 
 dataset_path_dit={
-	'HC3': '/mnt/cephfs/dataset/zhangshuhai/backup20240107/detect-gpt-gitHub/dataset/H3C'
+	'HC3': 'MGTBenchold/dataset/H3C'
 }
 
 import re
@@ -140,7 +140,7 @@ def load_meta_HC3(cache_dir):
 	return meta_data
 
 def load_TruthfulQA(cache_dir):
-	f = pd.read_csv("/mnt/cephfs/home/zhangshuhai/detect-gpt/MGTBench/datasets/TruthfulQA_chatgpt.csv")
+	f = pd.read_csv("MGTBenchold/datasets/TruthfulQA_chatgpt.csv")
 	q = f['Question'].tolist()
 	a_human = f['Best Answer'].tolist()
 	a_chat = f['chatgpt_answer'].tolist()
@@ -185,7 +185,7 @@ def load_TruthfulQA(cache_dir):
 
 
 def load_TruthfulQA_adv1(cache_dir):
-	f = pd.read_csv("/mnt/cephfs/home/zhangshuhai/detect-gpt/MGTBench/datasets/TruthfulQA_chatgpt_adv1.csv")
+	f = pd.read_csv("MGTBenchold/datasets/TruthfulQA_chatgpt_adv1.csv")
 	q = f['complete_question'].tolist()
 	a_human = f['Best Answer'].tolist()
 	a_chat = f['chatgpt_answer'].tolist()
@@ -229,7 +229,7 @@ def load_TruthfulQA_adv1(cache_dir):
 
 
 def load_TruthfulQA_adv2(cache_dir):
-	f = pd.read_csv("/mnt/cephfs/home/zhangshuhai/detect-gpt/MGTBench/datasets/TruthfulQA_chatgpt_adv2.csv")
+	f = pd.read_csv("MGTBenchold/datasets/TruthfulQA_chatgpt_adv2.csv")
 	q = f['complete_question'].tolist()
 	a_human = f['Best Answer'].tolist()
 	a_chat = f['chatgpt_answer'].tolist()
@@ -275,7 +275,7 @@ def load_TruthfulQA_adv2(cache_dir):
 
 
 def load_SQuAD1(cache_dir):
-	f = pd.read_csv("/mnt/cephfs/home/zhangshuhai/detect-gpt/MGTBench/datasets/SQuAD1_chatgpt.csv")
+	f = pd.read_csv("MGTBenchold/datasets/SQuAD1_chatgpt.csv")
 	q = f['Question'].tolist()
 	a_human = [eval(_)['text'][0] for _ in f['answers'].tolist()]
 	a_chat = f['chatgpt_answer'].tolist()
@@ -313,7 +313,7 @@ def load_SQuAD1(cache_dir):
 
 
 def load_SQuAD2(cache_dir):
-	f = pd.read_csv("/mnt/cephfs/home/zhangshuhai/detect-gpt/MGTBench/datasets/SQuAD2_chatgpt.csv")
+	f = pd.read_csv("MGTBenchold/datasets/SQuAD2_chatgpt.csv")
 
 	anwsers = f['answers'].tolist()
 	a_chat = f['chatgpt_answer'].tolist()
@@ -359,7 +359,7 @@ def load_SQuAD2(cache_dir):
 
 
 def load_NarrativeQA(cache_dir):
-	f = pd.read_csv("/mnt/cephfs/home/zhangshuhai/detect-gpt/MGTBench/datasets/NarrativeQA_chatgpt.csv")
+	f = pd.read_csv("MGTBenchold/datasets/NarrativeQA_chatgpt.csv")
 	q = f['Question'].tolist()
 	a_human = f['answers'].tolist()
 	a_human = [_.split(";")[0] for _ in a_human]

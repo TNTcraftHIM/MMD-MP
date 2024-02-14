@@ -21,7 +21,7 @@ if __name__ == '__main__':
 	parser.add_argument('--base_model_name', type=str, default="gpt2-medium")
 	parser.add_argument('--mask_filling_model_name',
 						type=str, default="t5-large")
-	parser.add_argument('--cache_dir', type=str, default="/mnt/cephfs/home/zhangshuhai/detect-gpt/~/.cache")
+	parser.add_argument('--cache_dir', type=str, default=".cache")
 	parser.add_argument('--DEVICE', type=str, default="cuda")
 
 	# params for DetectGPT
