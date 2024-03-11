@@ -1118,20 +1118,25 @@ if __name__ == '__main__':
 
         def test(epoch, test_lenth=2000, fea_real=fea_real, fea_generated=fea_generated, meta_save_model_flag='',
                  test_flag=args.test_flag):
+            ## Set the model to evaluation mode
             net.eval()
             global auroc_value_best
             with torch.no_grad():
                 feature_ref_ls = []
+                ## If the number of reference data is larger than the training batch size, then slice the reference data into batches and get the hidden states
                 if len(fea_reference) > train_batch_size:
                     for batch in tqdm.tqdm(range(len(fea_reference) // train_batch_size), desc="Testing for deep MMD"):
                         feature_ref = net(
                             fea_reference[batch * train_batch_size:(batch + 1) * train_batch_size].to('cuda'))
                         feature_ref_ls.append(feature_ref)
+                ## If the number of reference data is less than the training batch size, then get the hidden states directly
                 else:
                     feature_ref = net(fea_reference.to('cuda'))
                     feature_ref_ls.append(feature_ref)
+                ## Concatenate the hidden states of the reference data
                 feature_ref = torch.cat(feature_ref_ls, dim=0)
 
+                ## Function to get the hidden states of the real and generated data
                 def get_feature_cln_ls(fea_real):
                     feature_cln_ls = []
                     if len(fea_real) > train_batch_size:
@@ -1147,18 +1152,22 @@ if __name__ == '__main__':
                         feature_cln_ls.append(feature_cln)
                     return feature_cln_ls
 
+                ## Get the hidden states of the real and generated data
                 feature_cln_ls = get_feature_cln_ls(fea_real)
                 feature_adv_ls = get_feature_cln_ls(fea_generated)
 
+                ## Concatenate the hidden states of the real and generated data
                 feature_cln = torch.cat(feature_cln_ls, dim=0)
                 feature_adv = torch.cat(feature_adv_ls, dim=0)
 
+                ## Calculate the MMD value of the real and generated data
                 dt_clean = MMD_batch2(torch.cat([feature_ref, feature_cln], dim=0), feature_ref.shape[0], torch.cat(
                     [fea_reference[:feature_ref.shape[0]].to('cuda'), fea_real[:feature_cln.shape[0]].to('cuda')],
                     dim=0).view(feature_ref.shape[0] + feature_cln.shape[0], -1), sigma, sigma0_u, ep).to('cpu')
                 dt_adv = MMD_batch2(torch.cat([feature_ref, feature_adv], dim=0), feature_ref.shape[0], torch.cat(
                     [fea_reference[:feature_ref.shape[0]].to('cuda'), fea_generated[:feature_adv.shape[0]].to('cuda')],
                     dim=0).view(feature_ref.shape[0] + feature_adv.shape[0], -1), sigma, sigma0_u, ep).to('cpu')
+                ## Plot the MMD value and calculate the AUROC value
                 auroc_value = plot_mi(dt_clean, dt_adv)
                 auroc_list.append(auroc_value)
                 model_path = f'./{PATH_exper}/HC3-{args.base_model_name}/{id}'
@@ -1173,6 +1182,7 @@ if __name__ == '__main__':
                     'ep': ep
                 }
 
+                ## Save the model if the AUROC value is the best and the test flag is not set
                 if not test_flag:
                     if not os.path.isdir(model_path):
                         os.makedirs(model_path, exist_ok=True)
@@ -1190,11 +1200,14 @@ if __name__ == '__main__':
         def two_sample_test(epoch, test_lenth=2000, fea_real_ls=fea_real, fea_generated_ls=fea_generated,
                             meta_save_model_flag='', test_flag=args.test_flag, N=100):
             global power_best
+            ## Set the model to evaluation mode
             net.eval()
+            ## Cut the real and generated data to the same length (according to the minimum length of the real and generated data)
             fea_real_ls = fea_real_ls[:min(len(fea_real_ls), len(fea_generated_ls))]
             fea_generated_ls = fea_generated_ls[:min(len(fea_real_ls), len(fea_generated_ls))]
             with torch.no_grad():
 
+                ## Function to get the test power of the real and generated data pairs via N times of MMD test
                 def mmd_two_sampe(fea_real_ls, fea_generated_ls, N=100):
                     fea_real_ls = fea_real_ls[:min(len(fea_real_ls), len(fea_generated_ls))]
                     fea_generated_ls = fea_generated_ls[:min(len(fea_real_ls), len(fea_generated_ls))]
@@ -1226,7 +1239,9 @@ if __name__ == '__main__':
 
                     return test_power_ls
 
+                ## Get the test power of the real and generated data pairs
                 generated_test_power_ls = mmd_two_sampe(fea_real_ls, fea_generated_ls, N=N)
+                ## Calculate the average test power
                 power = sum(generated_test_power_ls) / len(generated_test_power_ls)
                 print(f"Test power: {np.round(power, 6)}")
                 model_path = f'./{PATH_exper}/HC3-{args.base_model_name}/{id}'
@@ -1241,6 +1256,7 @@ if __name__ == '__main__':
                     'ep': ep
                 }
 
+                ## Save the model if the test power is the best and the test flag is not set
                 if not test_flag:
                     if not os.path.isdir(model_path):
                         os.makedirs(model_path, exist_ok=True)
@@ -1270,6 +1286,7 @@ if __name__ == '__main__':
 
         id = args.id
 
+        ## Initialize the model with the given configuration
         net = mmdPreModel(config=config, num_mlp=args.num_mlp, transformer_flag=args.transformer_flag,
                           num_hidden_layers=args.num_hidden_layers).cuda()
         print('==> loading meta_model from checkpoint..')
@@ -1280,6 +1297,7 @@ if __name__ == '__main__':
         num_target = len(fea_real) // test_lenth
 
         power_ls = []
+        ## Get the test power of the real and generated data pairs
         for i in range(num_target):
             power = two_sample_test(0, fea_real_ls=fea_real[i * test_lenth:(i + 1) * test_lenth],
                                     fea_generated_ls=fea_generated[i * test_lenth:(i + 1) * test_lenth], test_flag=True,
@@ -1302,19 +1320,26 @@ if __name__ == '__main__':
         train_batch_size = args.train_batch_size
 
 
+        ## Function to train the model using two sample test
         def train(epoch):
             print('\nEpoch: %d' % epoch)
 
+            ## Set the model to training mode
             net.train()
             for batch in tqdm.tqdm(range(len(fea_train_generated) // train_batch_size), desc="Traning for deep MMD"):
+                ## Slice the real and generated data into batches
                 inputs = fea_train_real[batch * train_batch_size:(batch + 1) * train_batch_size]
                 x_adv = fea_train_generated[batch * train_batch_size:(batch + 1) * train_batch_size]
+                ## Check if the length of the real and generated data is the same
                 if inputs.shape[0] != x_adv.shape[0]:
                     break
+                ## Move the real and generated data to the GPU
                 inputs = inputs.cuda(non_blocking=True)
                 x_adv = x_adv.cuda(non_blocking=True)
+                ## Check if the length of the real and generated data is the same again
                 assert inputs.shape[0] == x_adv.shape[0]
 
+                ## Concatenate the real and generated data
                 X = torch.cat([inputs, x_adv], dim=0)
 
                 optimizer.zero_grad()
@@ -1343,33 +1368,45 @@ if __name__ == '__main__':
         id = args.id
         start_epoch = 0
         auroc_value_best_epoch = 0
+        ## train/test the model
         if not args.test_flag:
+            ## If the test flag is not set, train the model and test it
             for epoch in range(start_epoch, start_epoch + epochs):
                 time0 = time.time()
 
+                ## Shuffle the real and generated data
                 fea_train_real0 = fea_train_real0[np.random.permutation(fea_train_real0.shape[0])]
                 fea_train_generated0 = fea_train_generated0[np.random.permutation(fea_train_generated0.shape[0])]
                 if len(fea_train_real0) >= len(fea_train_generated0):
                     for i in range(len(fea_train_real0) // len(fea_train_generated0)):
+                        ## If the length of the real data is larger than the generated data, slice the real data into batches to match the length of the generated data
+                        ## In order to balance the contribution of the real and generated data to the training
                         fea_train_real = fea_train_real0[
                                          fea_train_generated0.shape[0] * i:fea_train_generated0.shape[0] * (i + 1)]
                         fea_train_generated = fea_train_generated0
                         sigma, sigma0_u, ep = train(epoch)
                 else:
+                    ## If the length of the generated data is larger than the real data, slice the generated data into batches to match the length of the real data
+                    ## In order to balance the contribution of the real and generated data to the training
                     for i in range(len(fea_train_generated0) // len(fea_train_real0)):
                         fea_train_generated = fea_train_generated0[
                                               len(fea_train_real0) * i: len(fea_train_real0) * (i + 1)]
                         fea_train_real = fea_train_real0
                         sigma, sigma0_u, ep = train(epoch)
+                ## Print the training time
                 print("train time:", time.time() - time0)
                 time0 = time.time()
+                ## Test the model
                 if (epoch + 1) % 1 == 0:
+                    ## Test the model and set test flag to True according to the script
+                    ## in this case, we're using the two sample test, so set the test flag of single instance test to True, so we're not saving the model according to the single instance test
                     power = two_sample_test(epoch, fea_real_ls=val_real, fea_generated_ls=val_generated, N=10)
                     auroc_value_epoch = test(epoch, fea_real=val_sing_real, fea_generated=val_sing_generated,
                                              test_flag=True)
                     if auroc_value_epoch > auroc_value_best_epoch: auroc_value_best_epoch = auroc_value_epoch
                 print("test time:", time.time() - time0)
 
+            ## After training, test the model again
             print('==> loading meta_best_model from checkpoint..')
             model_path = f'./{PATH_exper}/HC3-{args.base_model_name}/{id}'
             assert os.path.isdir(model_path), 'Error: no checkpoint directory found!'
@@ -1385,12 +1422,14 @@ if __name__ == '__main__':
                                 fea_generated_ls=fea_generated[i * test_lenth:(i + 1) * test_lenth], test_flag=True,
                                 N=10)
 
+            ## Print the best power and auroc value of the model
             print(f"{id}'s best power is {power}!")
             print(f"and the corresponding auroc is {auroc_value}!")
             print(f"but the best auroc is {auroc_value_best_epoch}!")
 
 
         else:
+            ## If the test flag is set, test the model only without training
             epoch = 99
             print('==> testing from checkpoint..')
             model_path = f'./{PATH_exper}/HC3-{args.base_model_name}/{id}'
@@ -1406,6 +1445,7 @@ if __name__ == '__main__':
             power = two_sample_test(epoch)
         all_power_list.append(np.round(power, 6))
         all_aruoc_list.append(np.round(auroc_value, 6))
+        ## Print the best power and auroc value of the model and the average and standard deviation of the power and auroc value
         print(f"The best power list is {all_power_list}!")
         print(f"The best auroc list is {all_aruoc_list}!")
         print(f"avg_power: {avg_auroc(all_power_list)[0]} and std_power: {avg_auroc(all_power_list)[1]}")
