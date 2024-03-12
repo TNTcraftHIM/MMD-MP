@@ -807,11 +807,13 @@ if __name__ == '__main__':
     for seed in range(990, 990 + args.trial_num):
         current_time_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         print(f"Time Start {seed}:", current_time_str)
+        ## Difference
         random.seed(seed)
         np.random.seed(seed)
         torch.manual_seed(seed)
         torch.cuda.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)
+        ## Difference
         torch.backends.cudnn.benchmark = False
         torch.backends.cudnn.deterministic = True
 
