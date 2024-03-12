@@ -50,7 +50,7 @@ conda env create -f detectGPT.yml
 <!-- # generate nature samples -->
 ```
 CUDA_VISIBLE_DEVICES=0 
-python run_meta_mmd_trans.py 
+python run_meta_mmd_trans_combined.py 
 --id 10001 
 --sigma0 55 
 --lr 0.00005  
@@ -71,12 +71,13 @@ python run_meta_mmd_trans.py
 --meta_test_flag 
 --epochs 100 
 --two_sample_test
+--metric power
 ```
 
 - Select the best model through best_auroc:
 ```
 CUDA_VISIBLE_DEVICES=1 
-python run_meta_mmd_trans_auroc.py 
+python run_meta_mmd_trans_combined.py 
 --id 10002 
 --sigma0 40 
 --lr 0.00005  
@@ -97,6 +98,7 @@ python run_meta_mmd_trans_auroc.py
 --meta_test_flag 
 --epochs 100 
 --two_sample_test
+--metric auroc
 ```
 
 **Testing MMD-MP.**
@@ -104,7 +106,7 @@ python run_meta_mmd_trans_auroc.py
 
 ```
 CUDA_VISIBLE_DEVICES=0 
-python run_meta_mmd_trans.py 
+python run_meta_mmd_trans_combined.py 
 --test_flag
 --id 10001 
 --sigma0 55 
