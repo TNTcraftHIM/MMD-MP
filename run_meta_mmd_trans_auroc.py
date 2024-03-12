@@ -1097,9 +1097,11 @@ if __name__ == '__main__':
                                 fea_real[batch * train_batch_size:(batch + 1) * train_batch_size].to('cuda'))
                             feature_cln_ls.append(feature_cln)
                     else:
+                        ## Difference
                         feature_cln = net(fea_real.to('cuda'))
                         # feature_adv = net(fea_generated.to('cuda'))
                         feature_cln_ls.append(feature_cln)
+                        ## Difference
                     # feature_adv_ls.append(feature_adv)
                     return feature_cln_ls
 
@@ -1232,8 +1234,10 @@ if __name__ == '__main__':
         # model_path = f'./net_D/resnet101/{id}'
         print("No meta learing!")
         sigma, sigma0_u, ep = maml.sigmaOPT ** 2, maml.sigma0OPT ** 2, maml.epsilonOPT ** 2
+        ## Difference
         if args.MMDO_flag:
             ep = torch.ones(1).to('cuda', torch.float)
+        ## Difference
         print('==> testing from the loaded checkpoint..')
         num_target = len(fea_real) // test_lenth
 
@@ -1323,9 +1327,11 @@ if __name__ == '__main__':
                 print("train time:", time.time() - time0)
                 time0 = time.time()
                 if (epoch + 1) % 1 == 0:
+                    ## Difference
                     power = two_sample_test(epoch, fea_real_ls=val_real, fea_generated_ls=val_generated, N=10,
                                             test_flag=True)
                     auroc_value_epoch = test(epoch, fea_real=val_sing_real, fea_generated=val_sing_generated)
+                    ## Difference
                     if auroc_value_epoch > auroc_value_best_epoch: auroc_value_best_epoch = auroc_value_epoch
                 print("test time:", time.time() - time0)
 
@@ -1336,12 +1342,16 @@ if __name__ == '__main__':
             net.load_state_dict(checkpoint['net'])
             sigma, sigma0_u, ep = checkpoint['sigma'], checkpoint['sigma0_u'], checkpoint['ep']
             print('==> testing from the loaded checkpoint..')
+            ## Difference
             power = two_sample_test(epoch, test_flag=True)
+            ## Difference
             auroc_value = test(epoch, fea_real=val_sing_real, fea_generated=val_sing_generated, test_flag=True)
             print('==> testing each model..')
             for i in range(len(args.text_generated_model_name)):
+                ## Difference
                 test(0, fea_real=val_sing_real_ls[i][:1000], fea_generated=val_sing_generated_ls[i][:1000],
                      test_flag=True)
+                ## Difference
             print(f"{id}'s best power is {power}!")
             print(f"and the corresponding auroc is {auroc_value}!")
             print(f"but the best auroc is {auroc_value_best_epoch}!")
