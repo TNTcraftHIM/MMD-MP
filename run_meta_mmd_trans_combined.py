@@ -799,10 +799,15 @@ if __name__ == '__main__':
 
     ## Add extra arguments for the command line to determine the plain text to be used for testing the model
     parser.add_argument('--test_text', type=str, default=None)
+    parser.add_argument('--test_text_file', type=str, default=None)
     args = parser.parse_args()
 
     ## Assert that the metric is either aruoc or power
     assert args.metric in ["power", "auroc"], "metric must be either power or auroc"
+
+    ## Check if the test_text_file exists
+    if args.test_text_file is not None:
+        assert os.path.exists(args.test_text_file), "test_text_file does not exist"
 
     ## Set folder name for saving the model and log to two_sample_test since we're training the model using two sample test
     PATH_exper = 'two_sample_test'
@@ -996,6 +1001,10 @@ if __name__ == '__main__':
                     generated_sent_token = [nltk.sent_tokenize(text)[1:-1] for text in generated]
                     if args.test_text is not None:
                         test_sent_token = [nltk.sent_tokenize(args.test_text)[1:-1]]
+                    elif args.test_text_file is not None:
+                        with open(args.test_text_file, 'r') as file:
+                            paragraphs = file.readlines()
+                        test_sent_token = [nltk.sent_tokenize(text) for text in paragraphs]
                     else:
                         test_sent_token = [""]
                     ## Remove the empty sentences
@@ -1027,7 +1036,7 @@ if __name__ == '__main__':
                     len_data = min(len(real_data_temp_seletced), len(generated_data_temp_seletced))
 
                     test_lenth = 100
-                    if args.test_text is not None:
+                    if args.test_text is not None or args.test_text_file is not None:
                         test_lenth = len(test_generated)
                     ## Check if the length of the remaining data is enough for the required number of sentences
                     assert len_data >= args.val_num + test_lenth + 250, print(
@@ -1132,7 +1141,7 @@ if __name__ == '__main__':
         print("val_generated:", len(val_generated))
         print("val_sing_real:", len(val_sing_real))
         print("val_sing_generated:", len(val_sing_generated))
-        if args.test_text is not None:
+        if args.test_text is not None or args.test_text_file is not None:
             print("fea_test:", len(fea_test))
             print("fea_test_single:", len(fea_test_single))
 
@@ -1481,7 +1490,7 @@ if __name__ == '__main__':
             net.load_state_dict(checkpoint['net'])
             sigma, sigma0_u, ep = checkpoint['sigma'], checkpoint['sigma0_u'], checkpoint['ep']
             # test(epoch)
-            if args.test_text is None:
+            if args.test_text is None and args.test_text_file is None:
                 auroc_value = test(epoch, fea_real=val_sing_real, fea_generated=val_sing_generated, test_flag=True)
                 power = two_sample_test(epoch, test_flag=True)
             else:
