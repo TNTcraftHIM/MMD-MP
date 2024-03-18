@@ -800,6 +800,7 @@ if __name__ == '__main__':
     ## Add extra arguments for the command line to determine the plain text to be used for testing the model
     parser.add_argument('--test_text', type=str, default=None)
     parser.add_argument('--test_text_file', type=str, default=None)
+    parser.add_argument('--test_text_split', action='store_true')
     args = parser.parse_args()
 
     ## Assert that the metric is either aruoc or power
@@ -928,6 +929,7 @@ if __name__ == '__main__':
         val_real_ls = []
         val_generated_ls = []
         fea_test_ls = []
+        fea_test_single_ls = []
 
         val_sing_real_ls = []
         val_sing_generated_ls = []
@@ -1000,17 +1002,20 @@ if __name__ == '__main__':
                     real_sent_token = [nltk.sent_tokenize(text)[1:-1] for text in real]
                     generated_sent_token = [nltk.sent_tokenize(text)[1:-1] for text in generated]
                     if args.test_text is not None:
-                        test_sent_token = [nltk.sent_tokenize(args.test_text)[1:-1]]
+                        test_sent_token = [nltk.sent_tokenize(args.test_text)]
                     elif args.test_text_file is not None:
                         with open(args.test_text_file, 'r') as file:
-                            paragraphs = file.readlines()
-                        test_sent_token = [nltk.sent_tokenize(text) for text in paragraphs]
+                            if args.test_text_split:
+                                paragraphs = file.readlines()
+                            else:
+                                paragraphs = [file.read()]
+                        test_sent_token = [nltk.sent_tokenize(text) for text in paragraphs if text.strip()]
                     else:
                         test_sent_token = [""]
                     ## Remove the empty sentences
                     real = [text for text in real_sent_token if len(text) > 0]
                     generated = [text for text in generated_sent_token if len(text) > 0]
-                    test_generated = [text for text in test_sent_token if len(text) > 0]
+                    custom_test = [text for text in test_sent_token if len(text) > 0]
                     ## Record the number of sentences in the real and generated data
                     train_length = args.target_senten_num  # 200
                     train_real_length = args.target_senten_num  # 200
@@ -1019,7 +1024,6 @@ if __name__ == '__main__':
                     ## Split the paragraphs according to required length and convert them into sentences (ignore sentences less than 5 words), and put them into real and generated data for training
                     train_real = [sen for pa in real[:train_real_length] for sen in pa if 5 < len(sen.split())]
                     train_generated = [sen for pa in generated[:train_length] for sen in pa if 5 < len(sen.split())]
-                    test_generated = [sen for pa in test_generated for sen in pa if 5 < len(sen.split())]
 
                     real_data = real
                     generated_data = generated
@@ -1029,15 +1033,17 @@ if __name__ == '__main__':
                                       real_data[train_real_length:]]
                     generated_data_temp = [[sentence for sentence in sublist if len(sentence.split()) >= 5] for sublist
                                            in generated_data[train_length:]]
+                    test_data_temp = [[sentence for sentence in sublist if len(sentence.split()) >= 5] for sublist in custom_test]
 
                     ## Keep the paragraphs with more than 5 sentences
                     real_data_temp_seletced = [pa_ls for pa_ls in real_data_temp if len(pa_ls) >= 5]
                     generated_data_temp_seletced = [pa_ls for pa_ls in generated_data_temp if len(pa_ls) >= 5]
+                    test_data_temp_seletced = [pa_ls for pa_ls in test_data_temp if len(pa_ls) >= 1]
                     len_data = min(len(real_data_temp_seletced), len(generated_data_temp_seletced))
 
                     test_lenth = 100
                     if args.test_text is not None or args.test_text_file is not None:
-                        test_lenth = len(test_generated)
+                        test_lenth = len(test_data_temp)
                     ## Check if the length of the remaining data is enough for the required number of sentences
                     assert len_data >= args.val_num + test_lenth + 250, print(
                         f'Please reduce the args.target_senten_num:{args.target_senten_num}')
@@ -1076,13 +1082,14 @@ if __name__ == '__main__':
                 ## Flatten the paragraphs into sentences
                 text_single_real_sen_ls = [sen for pa in text_single_real for sen in pa]
                 text_single_generated_sen_ls = [sen for pa in text_single_generated for sen in pa]
+                fea_test_single_sen_ls = [sen for pa in test_data_temp_seletced for sen in pa]
                 text_reference = [sen for pa in text_reference for sen in pa]
 
                 ## Get the hidden states of the validation, test, and single sentence data
                 fea_real = [fea_get(pa_ls, max_length=args.max_length, print_fea_dim=False) for pa_ls in text_real]
                 fea_generated = [fea_get(pa_ls, max_length=args.max_length, print_fea_dim=False) for pa_ls in
                                  text_generated]
-                fea_test = [fea_get(pa_ls, max_length=args.max_length, print_fea_dim=False) for pa_ls in test_generated]
+                fea_test = [fea_get(pa_ls, max_length=args.max_length, print_fea_dim=False) for pa_ls in test_data_temp_seletced]
 
                 val_real = [fea_get(pa_ls, max_length=args.max_length, print_fea_dim=False) for pa_ls in text_val_real]
                 val_generated = [fea_get(pa_ls, max_length=args.max_length, print_fea_dim=False) for pa_ls in
@@ -1097,10 +1104,12 @@ if __name__ == '__main__':
                 fea_reference = fea_get(text_reference, max_length=args.max_length)
                 val_singe_real = fea_get(text_single_real_sen_ls, max_length=args.max_length)
                 val_singe_generated = fea_get(text_single_generated_sen_ls, max_length=args.max_length)
+                fea_test_single = fea_get(fea_test_single_sen_ls, max_length=args.max_length)
 
                 fea_reference_ls.append(fea_reference)
                 val_sing_real_ls.append(val_singe_real)
                 val_sing_generated_ls.append(val_singe_generated)
+                fea_test_single_ls.append(fea_test_single)
 
         ## Concatenate the hidden states of the real and generated data (for training) and shuffle them
         fea_train_real0 = torch.cat(fea_train_real_ls, dim=0)
@@ -1120,7 +1129,7 @@ if __name__ == '__main__':
         val_sing_generated = torch.cat(val_sing_generated_ls, dim=0)
         val_sing_real = val_sing_real[np.random.permutation(val_sing_real.shape[0])][:1000]
         val_sing_generated = val_sing_generated[np.random.permutation(val_sing_generated.shape[0])][:1000]
-        fea_test_single = torch.cat(fea_test_ls, dim=0) if len(fea_test_ls) > 0 else None
+        fea_test_single = torch.cat(fea_test_single_ls, dim=0) if len(fea_test_single_ls) > 0 else None
         fea_test_single = fea_test_single[np.random.permutation(fea_test_single.shape[0])][:1000] if fea_test_single is not None else None
 
         ## Release the memory
@@ -1491,8 +1500,8 @@ if __name__ == '__main__':
             sigma, sigma0_u, ep = checkpoint['sigma'], checkpoint['sigma0_u'], checkpoint['ep']
             # test(epoch)
             if args.test_text is None and args.test_text_file is None:
-                auroc_value = test(epoch, fea_real=val_sing_real, fea_generated=val_sing_generated, test_flag=True)
                 power = two_sample_test(epoch, test_flag=True)
+                auroc_value = test(epoch, fea_real=val_sing_real, fea_generated=val_sing_generated, test_flag=True)
             else:
                 power = two_sample_test(epoch, fea_generated_ls=fea_test, test_flag=True)
                 auroc_value = test(epoch, fea_real=val_sing_real, fea_generated=fea_test_single, test_flag=True)
