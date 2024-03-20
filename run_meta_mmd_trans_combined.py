@@ -673,8 +673,8 @@ def fea_get(texts_ls, max_length=300, print_fea_dim=True):
 
 
 def avg_auroc(all_auroc_list):
-    if len(all_auroc_list) <= 2:
-        return 0.0, 0.0
+    # if len(all_auroc_list) <= 2:
+    #     return 0.0, 0.0
 
     # Find the index of the maximum and minimum values
     # max_index = all_auroc_list.index(max(all_auroc_list))
@@ -688,7 +688,7 @@ def avg_auroc(all_auroc_list):
     avg_auroc = np.round(sum(filtered_list) / len(filtered_list), 6)
 
     # Calculate the standard deviation of the remaining values
-    std_auroc = np.round(np.std(filtered_list), 6)
+    std_auroc = np.round(np.std(filtered_list), 6) if len(filtered_list) > 1 else "N/A"
 
     return avg_auroc, std_auroc
 
@@ -1032,7 +1032,7 @@ if __name__ == '__main__':
                     if args.test_text is not None:
                         test_sent_token = [nltk.sent_tokenize(args.test_text)]
                     elif args.test_text_file is not None:
-                        with open(args.test_text_file, 'r') as file:
+                        with open(args.test_text_file, 'r', encoding='utf-8') as file:
                             if args.test_text_split:
                                 paragraphs = file.readlines()
                             else:
