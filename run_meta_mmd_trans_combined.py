@@ -28,11 +28,6 @@ from MGTBenchold import dataset_loader
 from meta_train import mmdPreModel, Meta
 from utils_MMD import MMDu, MMD_batch2, TST_MMD_u
 
-# if not os.path.exists(nltk.data.find('tokenizers/punkt')):
-# 	nltk.download('punkt')
-# else:
-# 	print("punkt has already been downloaded")
-
 # define regex to match all <extra_id_*> tokens, where * is an integer
 pattern = re.compile(r"<extra_id_\d+>")
 
@@ -672,7 +667,7 @@ def fea_get(texts_ls, max_length=300, print_fea_dim=True):
     return real_feas_tensor
 
 
-def avg_auroc(all_auroc_list):
+def avg_value(all_auroc_list):
     # if len(all_auroc_list) <= 2:
     #     return 0.0, 0.0
 
@@ -1313,7 +1308,7 @@ if __name__ == '__main__':
                 generated_test_power_ls = mmd_two_sampe(fea_real_ls, fea_generated_ls, N=N)
                 ## Calculate the average test power
                 power = sum(generated_test_power_ls) / len(generated_test_power_ls)
-                print(f"Test power: {np.round(power, 6)}")
+                print(f"power: {np.round(power, 6)}")
                 model_path = f'./{PATH_exper}/HC3-{args.base_model_name}/{id}'
 
                 state = {
@@ -1527,8 +1522,8 @@ if __name__ == '__main__':
             def print_auroc_power(all_power_list=all_power_list, all_auroc_list=all_auroc_list):
                 print(f"The best power list is {all_power_list}!")
                 print(f"The best auroc list is {all_auroc_list}!")
-                print(f"avg_power: {avg_auroc(all_power_list)[0]} and std_power: {avg_auroc(all_power_list)[1]}")
-                print(f"avg_auroc: {avg_auroc(all_auroc_list)[0]} and std_auroc: {avg_auroc(all_auroc_list)[1]}")
+                print(f"avg_power: {avg_value(all_power_list)[0]} and std_power: {avg_value(all_power_list)[1]}")
+                print(f"avg_auroc: {avg_value(all_auroc_list)[0]} and std_auroc: {avg_value(all_auroc_list)[1]}")
 
             if args.test_text is None and args.test_text_file is None:
                 power = two_sample_test(epoch, test_flag=True)
@@ -1561,4 +1556,4 @@ if __name__ == '__main__':
 
 
     current_time_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print("Time Over:", current_time_str)
+    print("==========", "Script Ended:", current_time_str, "==========")
