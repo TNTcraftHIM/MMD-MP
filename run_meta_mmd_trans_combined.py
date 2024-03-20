@@ -7,6 +7,7 @@ import random
 import re
 import sys
 import time
+import logging
 from collections import namedtuple
 from multiprocessing.pool import ThreadPool
 
@@ -691,10 +692,28 @@ def avg_auroc(all_auroc_list):
 
     return avg_auroc, std_auroc
 
+class Logger(object):
+    def __init__(self, log_file):
+        self.terminal = sys.stdout
+        self.log = open(log_file, "a")
+
+    def write(self, message):
+        self.terminal.write(message)
+        self.log.write(message)
+        self.flush()
+
+    def flush(self):
+        # Flush both the terminal and the log file
+        self.terminal.flush()
+        self.log.flush()
 
 if __name__ == '__main__':
 
+    ## Set the device to GPU if available
     DEVICE = "cuda:0"
+
+    ## Suppress the warnings
+    transformers.logging.set_verbosity_error()
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', type=int, default=0)
@@ -793,6 +812,7 @@ if __name__ == '__main__':
     parser.add_argument('--random_fills', action='store_true')
     parser.add_argument('--random_fills_tokens', action='store_true')
     parser.add_argument('--cache_dir', type=str, default=".cache")
+    parser.add_argument('--print_details', action='store_true')
 
     ## Add extra arguments for the command line to determine the preffered metrics for saving the best model
     parser.add_argument('--metric', type=str, default="power", help="aruoc|power")
@@ -820,21 +840,29 @@ if __name__ == '__main__':
     if not os.path.isdir(model_path):
         os.makedirs(model_path, exist_ok=True)
     ## Make stdout and stderr to be written to the file
-    sys.stdout = open(model_path + "/log.log", "a")
+    sys.stdout = Logger(f'{model_path}/log.log') if args.print_details else open(model_path + "/log.log", "a")
     print(args)
     current_time_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print("Time Start:", current_time_str)
+    print("==========", "Script Started:", current_time_str, "==========")
 
     API_TOKEN_COUNTER = 0
-    all_aruoc_list = []
+    all_auroc_list = []
     all_power_list = []
+
+    test_auroc_list_real = []
+    test_auroc_list_generated = []
+    test_power_list_real = []
+    test_power_list_generated = []
 
     if 'xsum' in args.target_datasets:
         args.n_samples = args.n_samples + 200
+    current_trial = 0
     ## Sync the seed for all random number generators
     for seed in range(990, 990 + args.trial_num):
+        current_trial += 1
         current_time_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        print(f"Time Start {seed}:", current_time_str)
+        print() ## Print an empty line
+        print("----------", f"Start Time for Seed {seed} (Trial {current_trial}/{args.trial_num}):", current_time_str, "----------")
         random.seed(seed + args.seed_temp)
         np.random.seed(seed + args.seed_temp)
         torch.manual_seed(seed + args.seed_temp)
@@ -846,7 +874,7 @@ if __name__ == '__main__':
         if args.train_batch_size >= args.target_senten_num:
             args.train_batch_size = args.target_senten_num
 
-        print("You are Testing!") if args.test_flag else print("You are Training with metric: " + args.metric + "!")
+        print("You Are Testing!") if args.test_flag else print("You Are Training with Metric: " + args.metric + "!")
         if args.openai_model is not None:
             assert args.openai_key is not None, "Must provide OpenAI API key as --openai_key"
             openai.api_key = args.openai_key
@@ -997,7 +1025,7 @@ if __name__ == '__main__':
                 real = data['original']  # [:args.train_real_num]  len== n_samples, many sentences of words
                 generated = data['sampled']  # [:args.train_real_num]
                 if args.two_sample_test:
-                    nltk.download('punkt')
+                    nltk.download('punkt', quiet=True)
                     ## Tokenize the sentences and remove the first and last sentences
                     real_sent_token = [nltk.sent_tokenize(text)[1:-1] for text in real]
                     generated_sent_token = [nltk.sent_tokenize(text)[1:-1] for text in generated]
@@ -1089,7 +1117,7 @@ if __name__ == '__main__':
                 fea_real = [fea_get(pa_ls, max_length=args.max_length, print_fea_dim=False) for pa_ls in text_real]
                 fea_generated = [fea_get(pa_ls, max_length=args.max_length, print_fea_dim=False) for pa_ls in
                                  text_generated]
-                fea_test = [fea_get(pa_ls, max_length=args.max_length, print_fea_dim=False) for pa_ls in test_data_temp_seletced]
+                fea_test = [fea_get(pa_ls, max_length=args.max_length, print_fea_dim=False) for pa_ls in test_data_temp_seletced] if len(test_data_temp_seletced) > 0 else []
 
                 val_real = [fea_get(pa_ls, max_length=args.max_length, print_fea_dim=False) for pa_ls in text_val_real]
                 val_generated = [fea_get(pa_ls, max_length=args.max_length, print_fea_dim=False) for pa_ls in
@@ -1104,12 +1132,12 @@ if __name__ == '__main__':
                 fea_reference = fea_get(text_reference, max_length=args.max_length)
                 val_singe_real = fea_get(text_single_real_sen_ls, max_length=args.max_length)
                 val_singe_generated = fea_get(text_single_generated_sen_ls, max_length=args.max_length)
-                fea_test_single = fea_get(fea_test_single_sen_ls, max_length=args.max_length)
+                fea_test_single = fea_get(fea_test_single_sen_ls, max_length=args.max_length) if len(fea_test_single_sen_ls) > 0 else []
 
                 fea_reference_ls.append(fea_reference)
                 val_sing_real_ls.append(val_singe_real)
                 val_sing_generated_ls.append(val_singe_generated)
-                fea_test_single_ls.append(fea_test_single)
+                fea_test_single_ls.append(fea_test_single) if len(fea_test_single_sen_ls) > 0 else []
 
         ## Concatenate the hidden states of the real and generated data (for training) and shuffle them
         fea_train_real0 = torch.cat(fea_train_real_ls, dim=0)
@@ -1161,8 +1189,8 @@ if __name__ == '__main__':
         id = args.id
 
 
-        def test(epoch, test_lenth=2000, fea_real=fea_real, fea_generated=fea_generated, meta_save_model_flag='',
-                 test_flag=args.test_flag):
+        def single_instance_test(epoch, test_lenth=2000, fea_real=fea_real, fea_generated=fea_generated, meta_save_model_flag='',
+                                 test_flag=args.test_flag):
             ## Set the model to evaluation mode
             net.eval()
             global auroc_value_best
@@ -1190,9 +1218,6 @@ if __name__ == '__main__':
                                 fea_real[batch * train_batch_size:(batch + 1) * train_batch_size].to('cuda'))
                             feature_cln_ls.append(feature_cln)
                     else:
-                        print("fea_real:", len(fea_real))
-                        print("fea_generated:", len(fea_generated))
-                        print("val_real:", len(val_real))
                         feature_cln = net(fea_real.to('cuda'))
                         feature_cln_ls.append(feature_cln)
                     return feature_cln_ls
@@ -1334,9 +1359,9 @@ if __name__ == '__main__':
         ## Initialize the model with the given configuration
         net = mmdPreModel(config=config, num_mlp=args.num_mlp, transformer_flag=args.transformer_flag,
                           num_hidden_layers=args.num_hidden_layers).cuda()
-        print('==> loading meta_model from checkpoint..')
+        #print('==> loading meta_model from checkpoint..')
         # model_path = f'./net_D/resnet101/{id}'
-        print("No meta learing!")
+        #print("No meta learing!")
         sigma, sigma0_u, ep = maml.sigmaOPT ** 2, maml.sigma0OPT ** 2, maml.epsilonOPT ** 2
         ## Code for different metrics
         if args.metric == "auroc" and args.MMDO_flag:
@@ -1450,12 +1475,12 @@ if __name__ == '__main__':
                     if args.metric == "power":
                     ## in this case, we're using the two sample test, so set the test flag of single instance test to True, so we're not saving the model according to the single instance test
                         power = two_sample_test(epoch, fea_real_ls=val_real, fea_generated_ls=val_generated, N=10, test_flag=False)
-                        auroc_value_epoch = test(epoch, fea_real=val_sing_real, fea_generated=val_sing_generated,
-                                                 test_flag=True)
+                        auroc_value_epoch = single_instance_test(epoch, fea_real=val_sing_real, fea_generated=val_sing_generated,
+                                                                 test_flag=True)
                     else:
                         power = two_sample_test(epoch, fea_real_ls=val_real, fea_generated_ls=val_generated, N=10,
                                                 test_flag=True)
-                        auroc_value_epoch = test(epoch, fea_real=val_sing_real, fea_generated=val_sing_generated, test_flag=False)
+                        auroc_value_epoch = single_instance_test(epoch, fea_real=val_sing_real, fea_generated=val_sing_generated, test_flag=False)
                     if auroc_value_epoch > auroc_value_best_epoch: auroc_value_best_epoch = auroc_value_epoch
                 print("test time:", time.time() - time0)
 
@@ -1468,7 +1493,7 @@ if __name__ == '__main__':
             sigma, sigma0_u, ep = checkpoint['sigma'], checkpoint['sigma0_u'], checkpoint['ep']
             print('==> testing from the loaded checkpoint..')
             power = two_sample_test(epoch, test_flag=True)
-            auroc_value = test(epoch, fea_real=val_sing_real, fea_generated=val_sing_generated, test_flag=True)
+            auroc_value = single_instance_test(epoch, fea_real=val_sing_real, fea_generated=val_sing_generated, test_flag=True)
             print('==> testing each model..')
             for i in range(num_target):
                 ## Code for different metrics
@@ -1477,8 +1502,8 @@ if __name__ == '__main__':
                                 fea_generated_ls=fea_generated[i * test_lenth:(i + 1) * test_lenth], test_flag=True,
                                 N=10)
                 else:
-                    test(0, fea_real=val_sing_real_ls[i][:1000], fea_generated=val_sing_generated_ls[i][:1000],
-                         test_flag=True)
+                    single_instance_test(0, fea_real=val_sing_real_ls[i][:1000], fea_generated=val_sing_generated_ls[i][:1000],
+                                         test_flag=True)
 
             ## Print the best power and auroc value of the model
             print(f"{id}'s best power is {power}!")
@@ -1499,19 +1524,41 @@ if __name__ == '__main__':
             net.load_state_dict(checkpoint['net'])
             sigma, sigma0_u, ep = checkpoint['sigma'], checkpoint['sigma0_u'], checkpoint['ep']
             # test(epoch)
+            def print_auroc_power(all_power_list=all_power_list, all_auroc_list=all_auroc_list):
+                print(f"The best power list is {all_power_list}!")
+                print(f"The best auroc list is {all_auroc_list}!")
+                print(f"avg_power: {avg_auroc(all_power_list)[0]} and std_power: {avg_auroc(all_power_list)[1]}")
+                print(f"avg_auroc: {avg_auroc(all_auroc_list)[0]} and std_auroc: {avg_auroc(all_auroc_list)[1]}")
+
             if args.test_text is None and args.test_text_file is None:
                 power = two_sample_test(epoch, test_flag=True)
-                auroc_value = test(epoch, fea_real=val_sing_real, fea_generated=val_sing_generated, test_flag=True)
+                auroc_value = single_instance_test(epoch, fea_real=val_sing_real, fea_generated=val_sing_generated, test_flag=True)
+                all_power_list.append(np.round(power, 6))
+                all_auroc_list.append(np.round(auroc_value, 6))
+                ## Print the best power and auroc value of the model and the average and standard deviation of the power and auroc value if we're in the last trial
+                if current_trial == args.trial_num:
+                    print_auroc_power()
             else:
-                power = two_sample_test(epoch, fea_generated_ls=fea_test, test_flag=True)
-                auroc_value = test(epoch, fea_real=val_sing_real, fea_generated=fea_test_single, test_flag=True)
-        all_power_list.append(np.round(power, 6))
-        all_aruoc_list.append(np.round(auroc_value, 6))
-        ## Print the best power and auroc value of the model and the average and standard deviation of the power and auroc value
-        print(f"The best power list is {all_power_list}!")
-        print(f"The best auroc list is {all_aruoc_list}!")
-        print(f"avg_power: {avg_auroc(all_power_list)[0]} and std_power: {avg_auroc(all_power_list)[1]}")
-        print(f"avg_auroc: {avg_auroc(all_aruoc_list)[0]} and std_auroc: {avg_auroc(all_aruoc_list)[1]}")
+                ## Assume test text is generated
+                power_genenrated = two_sample_test(epoch, fea_generated_ls=fea_test, test_flag=True)
+                auroc_value_generated = single_instance_test(epoch, fea_real=val_sing_real, fea_generated=fea_test_single, test_flag=True)
+                test_power_list_generated.append(np.round(power_genenrated, 6))
+                test_auroc_list_generated.append(np.round(auroc_value_generated, 6))
+                ## Assume test text is real
+                power_real = two_sample_test(epoch, fea_real_ls=fea_test, test_flag=True)
+                auroc_value_real = single_instance_test(epoch, fea_real=fea_test_single, fea_generated=val_sing_generated, test_flag=True)
+                test_power_list_real.append(np.round(power_real, 6))
+                test_auroc_list_real.append(np.round(auroc_value_real, 6))
+                ## Print the best power and auroc value of the model and the average and standard deviation of the power and auroc value if we're in the last trial
+                if current_trial == args.trial_num:
+                    print('When assuming the test text is generated (comparing test text to ground truth real data):')
+                    print_auroc_power(test_power_list_generated, test_auroc_list_generated)
+
+                    print()
+
+                    print('When assuming the test text is real (comparing test text to ground truth generated data):')
+                    print_auroc_power(test_power_list_real, test_auroc_list_real)
+
 
     current_time_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print("Time Over:", current_time_str)

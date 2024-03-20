@@ -13,7 +13,7 @@ def timeit(func):
         result = func(*args, **kwargs)
         end_time = time.time()
         total_time = end_time - start_time
-        print(f'Function {func.__name__} Took {total_time:.4f} seconds\n\n')
+        print(f'Function {func.__name__} Took {total_time:.4f} seconds')
         return result
     return timeit_wrapper
 
