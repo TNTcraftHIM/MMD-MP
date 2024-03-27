@@ -1574,7 +1574,7 @@ if __name__ == '__main__':
                     ## Print the relative test statistics and relative test result
                     print(f"The relative test statistic list is {relative_test_statistic_list}!")
                     print(f"The relative test result list is {relative_test_result_list}!")
-                    print(f"The relative test result is {'generated' if np.average(relative_test_statistic_list) > 0 else 'real'}!")
+                    print(f"The relative test result is {'generated' if sum([1 for result in relative_test_result_list if result == 'generated']) > sum([1 for result in relative_test_result_list if result == 'real']) else 'real'}!")
 
 
     current_time_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
