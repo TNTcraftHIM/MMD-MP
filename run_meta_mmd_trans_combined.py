@@ -848,6 +848,7 @@ if __name__ == '__main__':
     test_auroc_list_generated = []
     test_power_list_real = []
     test_power_list_generated = []
+    relative_test_result_list = []
 
     if 'xsum' in args.target_datasets:
         args.n_samples = args.n_samples + 200
@@ -1263,7 +1264,7 @@ if __name__ == '__main__':
 
 
         def two_sample_test(epoch, test_lenth=2000, fea_real_ls=fea_real, fea_generated_ls=fea_generated,
-                            meta_save_model_flag='', test_flag=args.test_flag, N=100):
+                            meta_save_model_flag='', test_flag=args.test_flag, N=100, return_mmd=False):
             global power_best
             ## Set the model to evaluation mode
             net.eval()
@@ -1278,6 +1279,7 @@ if __name__ == '__main__':
                     fea_generated_ls = fea_generated_ls[:min(len(fea_real_ls), len(fea_generated_ls))]
 
                     test_power_ls = []
+                    mmd_value_ls = []
 
                     N_per = 50
                     alpha = 0.05
@@ -1301,14 +1303,17 @@ if __name__ == '__main__':
                             count_u = count_u + h_u
 
                         test_power_ls.append(count_u / N)
+                        mmd_value_ls.append(mmd_value_u)
 
-                    return test_power_ls
+                    return test_power_ls, mmd_value_ls
 
                 ## Get the test power of the real and generated data pairs
-                generated_test_power_ls = mmd_two_sampe(fea_real_ls, fea_generated_ls, N=N)
+                generated_test_power_ls, mmd_value_ls = mmd_two_sampe(fea_real_ls, fea_generated_ls, N=N)
                 ## Calculate the average test power
                 power = sum(generated_test_power_ls) / len(generated_test_power_ls)
+                mmd = sum(mmd_value_ls) / len(mmd_value_ls)
                 print(f"power: {np.round(power, 6)}")
+                print(f"mmd: {np.round(mmd, 6)}")
                 model_path = f'./{PATH_exper}/HC3-{args.base_model_name}/{id}'
 
                 state = {
@@ -1332,6 +1337,8 @@ if __name__ == '__main__':
                         torch.save(state, model_path + '/' + meta_save_model_flag + 'best_ckpt.pth')
                         print("Save the best model: power_best=", power_best)
             # torch.save(state, model_path + '/'+ meta_save_model_flag +'last_ckpt.pth')
+            if return_mmd:
+                return power, mmd
             return power
 
 
@@ -1535,15 +1542,21 @@ if __name__ == '__main__':
                     print_auroc_power()
             else:
                 ## Assume test text is generated
-                power_genenrated = two_sample_test(epoch, fea_generated_ls=fea_test, test_flag=True)
+                power_genenrated, mmd_generated = two_sample_test(epoch, fea_generated_ls=fea_test, test_flag=True, return_mmd=True)
                 auroc_value_generated = single_instance_test(epoch, fea_real=val_sing_real, fea_generated=fea_test_single, test_flag=True)
                 test_power_list_generated.append(np.round(power_genenrated, 6))
                 test_auroc_list_generated.append(np.round(auroc_value_generated, 6))
                 ## Assume test text is real
-                power_real = two_sample_test(epoch, fea_real_ls=fea_test, test_flag=True)
+                power_real, mmd_real = two_sample_test(epoch, fea_real_ls=fea_test, test_flag=True, return_mmd=True)
                 auroc_value_real = single_instance_test(epoch, fea_real=fea_test_single, fea_generated=val_sing_generated, test_flag=True)
                 test_power_list_real.append(np.round(power_real, 6))
                 test_auroc_list_real.append(np.round(auroc_value_real, 6))
+                ## Calculate relative test statistic
+                relative_test_statistic = (mmd_generated - mmd_real) / mmd_real
+                if relative_test_statistic > 0:
+                    relative_test_result_list.append("generated")
+                else:
+                    relative_test_result_list.append("real")
                 ## Print the best power and auroc value of the model and the average and standard deviation of the power and auroc value if we're in the last trial
                 if current_trial == args.trial_num:
                     print('When assuming the test text is generated (comparing test text to ground truth real data):')
@@ -1553,6 +1566,10 @@ if __name__ == '__main__':
 
                     print('When assuming the test text is real (comparing test text to ground truth generated data):')
                     print_auroc_power(test_power_list_real, test_auroc_list_real)
+
+                    print()
+
+                    print(f"The relative test results {'are' if len(relative_test_result_list) > 1 else 'is'} {relative_test_result_list if len(relative_test_result_list) > 1 else relative_test_result_list[0]}!")
 
 
     current_time_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
