@@ -848,6 +848,7 @@ if __name__ == '__main__':
     test_auroc_list_generated = []
     test_power_list_real = []
     test_power_list_generated = []
+    relative_test_statistic_list = []
     relative_test_result_list = []
 
     if 'xsum' in args.target_datasets:
@@ -1553,10 +1554,11 @@ if __name__ == '__main__':
                 test_auroc_list_real.append(np.round(auroc_value_real, 6))
                 ## Calculate relative test statistic
                 relative_test_statistic = (mmd_generated - mmd_real) / mmd_real
+                relative_test_statistic_list.append(np.round(relative_test_statistic, 6))
                 if relative_test_statistic > 0:
-                    relative_test_result_list.append("generated")
+                    relative_test_result_list.append('generated')
                 else:
-                    relative_test_result_list.append("real")
+                    relative_test_result_list.append('real')
                 ## Print the best power and auroc value of the model and the average and standard deviation of the power and auroc value if we're in the last trial
                 if current_trial == args.trial_num:
                     print('When assuming the test text is generated (comparing test text to ground truth real data):')
@@ -1569,7 +1571,10 @@ if __name__ == '__main__':
 
                     print()
 
-                    print(f"The relative test results {'are' if len(relative_test_result_list) > 1 else 'is'} {relative_test_result_list if len(relative_test_result_list) > 1 else relative_test_result_list[0]}!")
+                    ## Print the relative test statistics and relative test result
+                    print(f"The relative test statistic list is {relative_test_statistic_list}!")
+                    print(f"The relative test result list is {relative_test_result_list}!")
+                    print(f"The relative test result is {'generated' if np.average(relative_test_statistic_list) > 0 else 'real'}!")
 
 
     current_time_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
