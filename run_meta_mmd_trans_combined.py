@@ -1553,7 +1553,7 @@ if __name__ == '__main__':
                 test_power_list_real.append(np.round(power_real, 6))
                 test_auroc_list_real.append(np.round(auroc_value_real, 6))
                 ## Calculate relative test statistic
-                relative_test_statistic = (mmd_generated - mmd_real) / mmd_real
+                relative_test_statistic = mmd_generated**2 - mmd_real**2
                 relative_test_statistic_list.append(np.round(relative_test_statistic, 6))
                 if relative_test_statistic > 0:
                     relative_test_result_list.append('generated')
