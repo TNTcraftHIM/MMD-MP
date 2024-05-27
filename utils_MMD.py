@@ -1,5 +1,7 @@
 import numpy as np
 import torch
+import scipy as sp
+
 # import torchvision # use it for torch.utils.data
 # import freqopttest.data as data
 # import freqopttest.tst as tst
@@ -724,4 +726,77 @@ def TST_C2ST_S(pred_C2ST, N_per, N1, alpha):
 # 	h = 0
 # 	if s.item() > threshold:
 # 		h = 1
-# 	return h, threshold, 
+# 	return h, threshold,
+
+def flexible_kernel(X, Y, sigma, sigma0=0.1, epsilon=1e-10, is_smooth=True):
+    """Flexible kernel calculation as in MMDu."""
+    Dxy = Pdist2(X, Y)
+    L = 1
+    if is_smooth:
+        Kxy = (1 - epsilon) * torch.exp(-(Dxy / sigma0)**L - Dxy / sigma) + epsilon * torch.exp(-Dxy / sigma)
+    else:
+        Kxy = torch.exp(-Dxy / sigma0)
+    return Kxy
+
+
+
+def MMD_Diff_Var(Kyy, Kzz, Kxy, Kxz):
+	"""Compute the variance of the difference statistic MMDXY - MMDXZ."""
+	"""Referenced from: https://github.com/eugenium/MMD/blob/master/mmd.py"""
+	m = Kxy.shape[0]
+	n = Kyy.shape[0]
+	r = Kzz.shape[0]
+
+	Kyynd = Kyy - np.diag(np.diagonal(Kyy))
+	Kzznd = Kzz - np.diag(np.diagonal(Kzz))
+
+	u_yy = np.sum(Kyynd) * (1. / (n * (n - 1)))
+	u_zz = np.sum(Kzznd) * (1. / (r * (r - 1)))
+	u_xy = np.sum(Kxy) / (m * n)
+	u_xz = np.sum(Kxz) / (m * r)
+
+	t1 = (1. / n ** 3) * np.sum(Kyynd.T.dot(Kyynd)) - u_yy ** 2
+	t2 = (1. / (n ** 2 * m)) * np.sum(Kxy.T.dot(Kxy)) - u_xy ** 2
+	t3 = (1. / (n * m ** 2)) * np.sum(Kxy.dot(Kxy.T)) - u_xy ** 2
+	t4 = (1. / r ** 3) * np.sum(Kzznd.T.dot(Kzznd)) - u_zz ** 2
+	t5 = (1. / (r * m ** 2)) * np.sum(Kxz.dot(Kxz.T)) - u_xz ** 2
+	t6 = (1. / (r ** 2 * m)) * np.sum(Kxz.T.dot(Kxz)) - u_xz ** 2
+	t7 = (1. / (n ** 2 * m)) * np.sum(Kyynd.dot(Kxy.T)) - u_yy * u_xy
+	t8 = (1. / (n * m * r)) * np.sum(Kxy.T.dot(Kxz)) - u_xz * u_xy
+	t9 = (1. / (r ** 2 * m)) * np.sum(Kzznd.dot(Kxz.T)) - u_zz * u_xz
+
+	zeta1 = t1 + t2 + t3 + t4 + t5 + t6 - 2 * (t7 + t8 + t9)
+	zeta2 = (1 / m / (m - 1)) * np.sum((Kyynd - Kzznd - Kxy.T - Kxy + Kxz + Kxz.T) ** 2) - (
+				u_yy - 2 * u_xy - (u_zz - 2 * u_xz)) ** 2
+
+	data = {'t1': t1, 't2': t2, 't3': t3, 't4': t4, 't5': t5, 't6': t6, 't7': t7, 't8': t8, 't9': t9, 'zeta1': zeta1,
+			'zeta2': zeta2}
+
+	Var = (4 * (m - 2) / (m * (m - 1))) * zeta1
+	Var_z2 = Var + (2. / (m * (m - 1))) * zeta2
+
+	return Var, Var_z2, data
+
+
+def TST_MMD_u_3S(ref_fea, fea_y, fea_z, sigma, sigma0, epsilon, is_smooth=True):
+    """Run three-sample test (TST) using deep kernel kernel."""
+    X = ref_fea.clone().detach().cuda()
+    Y = fea_y.clone().detach().cuda()
+    Z = fea_z.clone().detach().cuda()
+
+    Kyy = flexible_kernel(Y, Y, sigma, sigma0, epsilon, is_smooth)
+    Kzz = flexible_kernel(Z, Z, sigma, sigma0, epsilon, is_smooth)
+    Kxy = flexible_kernel(X, Y, sigma, sigma0, epsilon, is_smooth)
+    Kxz = flexible_kernel(X, Z, sigma, sigma0, epsilon, is_smooth)
+
+    Diff_Var, _, _ = MMD_Diff_Var(Kyy.cpu().numpy(), Kzz.cpu().numpy(), Kxy.cpu().numpy(), Kxz.cpu().numpy())
+
+    u_yy = torch.sum(Kyy) / (Y.shape[0] * (Y.shape[0] - 1))
+    u_zz = torch.sum(Kzz) / (Z.shape[0] * (Z.shape[0] - 1))
+    u_xy = torch.sum(Kxy) / (X.shape[0] * Y.shape[0])
+    u_xz = torch.sum(Kxz) / (X.shape[0] * Z.shape[0])
+
+    t = u_yy - 2 * u_xy - (u_zz - 2 * u_xz)
+    p_value = sp.stats.norm.cdf(-t.cpu().numpy() / np.sqrt((Diff_Var)))
+
+    return p_value.item()

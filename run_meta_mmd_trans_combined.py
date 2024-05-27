@@ -26,7 +26,7 @@ from transformers import RobertaTokenizer, RobertaModel
 import custom_datasets
 from MGTBenchold import dataset_loader
 from meta_train import mmdPreModel, Meta
-from utils_MMD import MMDu, MMD_batch2, TST_MMD_u
+from utils_MMD import MMDu, MMD_batch2, TST_MMD_u, TST_MMD_u_3S
 
 # define regex to match all <extra_id_*> tokens, where * is an integer
 pattern = re.compile(r"<extra_id_\d+>")
@@ -812,6 +812,9 @@ if __name__ == '__main__':
     ## Add extra arguments for the command line to determine the preffered metrics for saving the best model
     parser.add_argument('--metric', type=str, default="power", help="aruoc|power")
 
+    ## Add extra arguments for the command line for relative testing
+    parser.add_argument('--relative_test_alpha', type=float, default=0.05)
+
     ## Add extra arguments for the command line to determine the plain text to be used for testing the model
     parser.add_argument('--test_text', type=str, default=None)
     parser.add_argument('--test_text_file', type=str, default=None)
@@ -848,7 +851,7 @@ if __name__ == '__main__':
     test_auroc_list_generated = []
     test_power_list_real = []
     test_power_list_generated = []
-    relative_test_statistic_list = []
+    relative_test_p_value_list = []
     relative_test_result_list = []
 
     if 'xsum' in args.target_datasets:
@@ -1264,14 +1267,16 @@ if __name__ == '__main__':
             return auroc_value
 
 
-        def two_sample_test(epoch, test_lenth=2000, fea_real_ls=fea_real, fea_generated_ls=fea_generated,
-                            meta_save_model_flag='', test_flag=args.test_flag, N=100, return_mmd=False):
+        def two_sample_test(epoch, test_lenth=2000, fea_real_ls=fea_real, fea_generated_ls=fea_generated, fea_reference_ls=None,
+                            meta_save_model_flag='', test_flag=args.test_flag, N=100, relative_test=False):
             global power_best
             ## Set the model to evaluation mode
             net.eval()
             ## Cut the real and generated data to the same length (according to the minimum length of the real and generated data)
             fea_real_ls = fea_real_ls[:min(len(fea_real_ls), len(fea_generated_ls))]
             fea_generated_ls = fea_generated_ls[:min(len(fea_real_ls), len(fea_generated_ls))]
+            if fea_reference_ls is not None:
+                fea_reference = fea_reference_ls[:min(len(fea_reference_ls), len(fea_real_ls))]
             with torch.no_grad():
 
                 ## Function to get the test power of the real and generated data pairs via N times of MMD test
@@ -1308,6 +1313,40 @@ if __name__ == '__main__':
 
                     return test_power_ls, mmd_value_ls
 
+                def mmd_three_sample(fea_ref_ls, fea_y_ls, fea_z_ls, N=100):
+                    min_len = min(len(fea_ref_ls), len(fea_y_ls), len(fea_z_ls))
+                    fea_ref_ls = fea_ref_ls[:min_len]
+                    fea_y_ls = fea_y_ls[:min_len]
+                    fea_z_ls = fea_z_ls[:min_len]
+
+                    p_value_ls = []
+
+                    for i in range(len(fea_ref_ls)):
+                        fea_ref_ori = fea_ref_ls[i].to('cuda')
+                        fea_y_ori = fea_y_ls[i].to('cuda')
+                        fea_z_ori = fea_z_ls[i].to('cuda')
+
+                        min_len = min(len(fea_ref_ori), len(fea_y_ori), len(fea_z_ori))
+                        fea_ref_ori = fea_ref_ori[:min_len]
+                        fea_y_ori = fea_y_ori[:min_len]
+                        fea_z_ori = fea_z_ori[:min_len]
+
+                        final_x = net(fea_ref_ori)
+                        final_y = net(fea_y_ori)
+                        final_z = net(fea_z_ori)
+
+                        for _ in range(N):
+                            p_value = TST_MMD_u_3S(final_x, final_y, final_z, sigma, sigma0_u, ep, is_smooth=True)
+                            p_value_ls.append(p_value)
+
+                    avg_p_value = sum(p_value_ls) / len(p_value_ls)
+
+                    return p_value_ls, avg_p_value
+
+
+                if relative_test:
+                    ## Get the p_value of the relative test
+                    p_value_ls, avg_p_value= mmd_three_sample(fea_reference, fea_real, fea_generated, N=N)
                 ## Get the test power of the real and generated data pairs
                 generated_test_power_ls, mmd_value_ls = mmd_two_sampe(fea_real_ls, fea_generated_ls, N=N)
                 ## Calculate the average test power
@@ -1338,8 +1377,8 @@ if __name__ == '__main__':
                         torch.save(state, model_path + '/' + meta_save_model_flag + 'best_ckpt.pth')
                         print("Save the best model: power_best=", power_best)
             # torch.save(state, model_path + '/'+ meta_save_model_flag +'last_ckpt.pth')
-            if return_mmd:
-                return power, mmd
+            if relative_test:
+                return avg_p_value
             return power
 
 
@@ -1543,22 +1582,19 @@ if __name__ == '__main__':
                     print_auroc_power()
             else:
                 ## Assume test text is generated
-                power_genenrated, mmd_generated = two_sample_test(epoch, fea_generated_ls=fea_test, test_flag=True, return_mmd=True)
+                power_genenrated= two_sample_test(epoch, fea_generated_ls=fea_test, test_flag=True)
                 auroc_value_generated = single_instance_test(epoch, fea_real=val_sing_real, fea_generated=fea_test_single, test_flag=True)
                 test_power_list_generated.append(np.round(power_genenrated, 6))
                 test_auroc_list_generated.append(np.round(auroc_value_generated, 6))
                 ## Assume test text is real
-                power_real, mmd_real = two_sample_test(epoch, fea_real_ls=fea_test, test_flag=True, return_mmd=True)
+                power_real = two_sample_test(epoch, fea_real_ls=fea_test, test_flag=True)
                 auroc_value_real = single_instance_test(epoch, fea_real=fea_test_single, fea_generated=val_sing_generated, test_flag=True)
                 test_power_list_real.append(np.round(power_real, 6))
                 test_auroc_list_real.append(np.round(auroc_value_real, 6))
-                ## Calculate relative test statistic
-                relative_test_statistic = mmd_generated**2 - mmd_real**2
-                relative_test_statistic_list.append(np.round(relative_test_statistic, 6))
-                if relative_test_statistic > 0:
-                    relative_test_result_list.append('generated')
-                else:
-                    relative_test_result_list.append('real')
+                ## Get the relative test p_value
+                p_value = two_sample_test(epoch, fea_real_ls=fea_real, fea_generated_ls=fea_generated, fea_reference_ls=fea_test, test_flag=True, relative_test=True)
+                relative_test_p_value_list.append(np.round(p_value, 6))
+                relative_test_result_list.append('generated' if p_value < args.relative_test_alpha else 'real')
                 ## Print the best power and auroc value of the model and the average and standard deviation of the power and auroc value if we're in the last trial
                 if current_trial == args.trial_num:
                     print('When assuming the test text is generated (comparing test text to ground truth real data):')
@@ -1571,8 +1607,8 @@ if __name__ == '__main__':
 
                     print()
 
-                    ## Print the relative test statistics and relative test result
-                    print(f"The relative test statistic list is {relative_test_statistic_list}!")
+                    ## Print the relative test p_value and lists
+                    print(f"The relative test p_value list is {relative_test_p_value_list}!")
                     print(f"The relative test result list is {relative_test_result_list}!")
                     print(f"The relative test result is {'generated' if sum([1 for result in relative_test_result_list if result == 'generated']) > sum([1 for result in relative_test_result_list if result == 'real']) else 'real'}!")
 
