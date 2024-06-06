@@ -1320,6 +1320,7 @@ if __name__ == '__main__':
                     fea_z_ls = fea_z_ls[:min_len]
 
                     p_value_ls = []
+                    test_power_ls = []
 
                     for i in range(len(fea_ref_ls)):
                         fea_ref_ori = fea_ref_ls[i].to('cuda')
@@ -1335,25 +1336,31 @@ if __name__ == '__main__':
                         final_y = net(fea_y_ori)
                         final_z = net(fea_z_ori)
 
+                        count_u = 0
                         for _ in range(N):
-                            p_value = TST_MMD_u_3S(final_x, final_y, final_z, sigma, sigma0_u, ep, is_smooth=True)
-                            p_value_ls.append(p_value)
+                            h_u, p_value = TST_MMD_u_3S(final_x, final_y, final_z, sigma, sigma0_u, ep, args.relative_test_alpha, is_smooth=True)
+                            count_u = count_u + h_u
 
-                    avg_p_value = sum(p_value_ls) / len(p_value_ls)
+                        p_value_ls.append(p_value)
+                        test_power_ls.append(count_u / N)
 
-                    return p_value_ls, avg_p_value
+                    return test_power_ls, p_value_ls
 
 
                 if relative_test:
                     ## Get the p_value of the relative test
-                    p_value_ls, avg_p_value= mmd_three_sample(fea_reference, fea_real, fea_generated, N=N)
-                ## Get the test power of the real and generated data pairs
-                generated_test_power_ls, mmd_value_ls = mmd_two_sampe(fea_real_ls, fea_generated_ls, N=N)
+                    generated_test_power_ls, p_value_ls= mmd_three_sample(fea_reference, fea_real, fea_generated, N=N)
+                    avg_p_value = sum(p_value_ls) / len(p_value_ls)
+                    print(f"avg_p_value: {np.round(avg_p_value, 6)}")
+                else:
+                    ## Get the test power of the real and generated data pairs
+                    generated_test_power_ls, mmd_value_ls = mmd_two_sampe(fea_real_ls, fea_generated_ls, N=N)
+                    mmd = sum(mmd_value_ls) / len(mmd_value_ls)
+                    print(f"mmd: {np.round(mmd, 6)}")
                 ## Calculate the average test power
                 power = sum(generated_test_power_ls) / len(generated_test_power_ls)
-                mmd = sum(mmd_value_ls) / len(mmd_value_ls)
                 print(f"power: {np.round(power, 6)}")
-                print(f"mmd: {np.round(mmd, 6)}")
+
                 model_path = f'./{PATH_exper}/HC3-{args.base_model_name}/{id}'
 
                 state = {
@@ -1594,7 +1601,7 @@ if __name__ == '__main__':
                 ## Get the relative test p_value
                 p_value = two_sample_test(epoch, fea_real_ls=fea_real, fea_generated_ls=fea_generated, fea_reference_ls=fea_test, test_flag=True, relative_test=True)
                 relative_test_p_value_list.append(np.round(p_value, 6))
-                relative_test_result_list.append('generated' if p_value < args.relative_test_alpha else 'real')
+                relative_test_result_list.append('real' if p_value > args.relative_test_alpha else 'generated')
                 ## Print the best power and auroc value of the model and the average and standard deviation of the power and auroc value if we're in the last trial
                 if current_trial == args.trial_num:
                     print('When assuming the test text is generated (comparing test text to ground truth real data):')
