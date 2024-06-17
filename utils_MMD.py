@@ -752,7 +752,7 @@ def TST_C2ST_S(pred_C2ST, N_per, N1, alpha):
 # 		h = 1
 # 	return h, threshold,
 
-def flexible_kernel(X, Y, sigma, sigma0=0.1, epsilon=1e-10, is_smooth=True):
+def flexible_kernel(X, Y, sigma, sigma0=0.1, epsilon=1e-08, is_smooth=True):
     """Flexible kernel calculation as in MMDu."""
     Dxy = Pdist2(X, Y)
     L = 1
@@ -763,7 +763,7 @@ def flexible_kernel(X, Y, sigma, sigma0=0.1, epsilon=1e-10, is_smooth=True):
     return Kxy
 
 
-def MMD_Diff_Var(Kyy, Kzz, Kxy, Kxz):
+def MMD_Diff_Var(Kyy, Kzz, Kxy, Kxz, epsilon=1e-08):
     """Compute the variance of the difference statistic MMDXY - MMDXZ."""
     """Referenced from: https://github.com/eugenium/MMD/blob/master/mmd.py"""
     m = Kxy.shape[0]
@@ -788,9 +788,11 @@ def MMD_Diff_Var(Kyy, Kzz, Kxy, Kxz):
     t8 = (1. / (n * m * r)) * np.sum(Kxy.T.dot(Kxz)) - u_xz * u_xy
     t9 = (1. / (r ** 2 * m)) * np.sum(Kzznd.dot(Kxz.T)) - u_zz * u_xz
 
-    zeta1 = t1 + t2 + t3 + t4 + t5 + t6 - 2 * (t7 + t8 + t9)
-    zeta2 = (1 / m / (m - 1)) * np.sum((Kyynd - Kzznd - Kxy.T - Kxy + Kxz + Kxz.T) ** 2) - (
-            u_yy - 2 * u_xy - (u_zz - 2 * u_xz)) ** 2
+    if type(epsilon) == torch.Tensor:
+        epsilon = epsilon.cpu().numpy()
+    zeta1 = max(t1 + t2 + t3 + t4 + t5 + t6 - 2 * (t7 + t8 + t9), epsilon)
+    zeta2 = max((1 / m / (m - 1)) * np.sum((Kyynd - Kzznd - Kxy.T - Kxy + Kxz + Kxz.T) ** 2) -
+                (u_yy - 2 * u_xy - (u_zz - 2 * u_xz)) ** 2, epsilon)
 
     data = {'t1': t1, 't2': t2, 't3': t3, 't4': t4, 't5': t5, 't6': t6, 't7': t7, 't8': t8, 't9': t9, 'zeta1': zeta1,
             'zeta2': zeta2}
@@ -815,7 +817,7 @@ def TST_MMD_u_3S(ref_fea, fea_y, fea_z, sigma, sigma0, epsilon, alpha, is_smooth
     Kyynd = Kyy - torch.diag(torch.diag(Kyy))
     Kzznd = Kzz - torch.diag(torch.diag(Kzz))
 
-    Diff_Var, _, _ = MMD_Diff_Var(Kyy.cpu().numpy(), Kzz.cpu().numpy(), Kxy.cpu().numpy(), Kxz.cpu().numpy())
+    Diff_Var, _, _ = MMD_Diff_Var(Kyy.cpu().numpy(), Kzz.cpu().numpy(), Kxy.cpu().numpy(), Kxz.cpu().numpy(), epsilon)
 
     u_yy = torch.sum(Kyynd) / (Y.shape[0] * (Y.shape[0] - 1))
     u_zz = torch.sum(Kzznd) / (Z.shape[0] * (Z.shape[0] - 1))
@@ -823,6 +825,8 @@ def TST_MMD_u_3S(ref_fea, fea_y, fea_z, sigma, sigma0, epsilon, alpha, is_smooth
     u_xz = torch.sum(Kxz) / (X.shape[0] * Z.shape[0])
 
     t = u_yy - 2 * u_xy - (u_zz - 2 * u_xz)
+    if Diff_Var <= 0:
+        Diff_Var = max(epsilon.cpu().numpy(), 1e-08)
     p_value = sp.stats.norm.cdf(-t.cpu().numpy() / np.sqrt((Diff_Var)))
 
     if p_value > alpha:
