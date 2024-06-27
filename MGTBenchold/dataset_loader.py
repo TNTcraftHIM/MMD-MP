@@ -43,11 +43,12 @@ def process_spaces(text):
 
 def process_text_truthfulqa_adv(text):
 
-	if "I am sorry" in text:
+	if "I am sorry" in text or "I'm sorry" in text:
 		first_period = text.index('.')
 		start_idx = first_period + 2
 		text = text[start_idx:]
-	if "as an AI language model" in text or "As an AI language model" in text:
+	# if "as an AI language model" in text or "As an AI language model" in text:
+	if "as an AI language model" in text or "As an AI language model" in text or "I'm an AI language model" in text or "As a language model" in text:
 		first_period = text.index('.')
 		start_idx = first_period + 2
 		text = text[start_idx:]
@@ -144,6 +145,7 @@ def load_TruthfulQA(cache_dir):
 	q = f['Question'].tolist()
 	a_human = f['Best Answer'].tolist()
 	a_chat = f['chatgpt_answer'].tolist()
+	a_chat = [process_text_truthfulqa_adv(_) for _ in a_chat]
 	c = f['Category'].tolist()
 
 	res = []
@@ -185,10 +187,11 @@ def load_TruthfulQA(cache_dir):
 
 
 def load_TruthfulQA_adv1(cache_dir):
-	f = pd.read_csv("MGTBenchold/datasets/TruthfulQA_chatgpt_adv1.csv")
+	f = pd.read_csv("MGTBenchold/datasets/TruthfulQA_chatgpt_prompt1.csv")
 	q = f['complete_question'].tolist()
 	a_human = f['Best Answer'].tolist()
 	a_chat = f['chatgpt_answer'].tolist()
+	a_chat = [process_text_truthfulqa_adv(_) for _ in a_chat]
 	c = f['Category'].tolist()
 	res = []
 	for i in range(len(q)):
@@ -229,7 +232,7 @@ def load_TruthfulQA_adv1(cache_dir):
 
 
 def load_TruthfulQA_adv2(cache_dir):
-	f = pd.read_csv("MGTBenchold/datasets/TruthfulQA_chatgpt_adv2.csv")
+	f = pd.read_csv("MGTBenchold/datasets/TruthfulQA_chatgpt_prompt2.csv")
 	q = f['complete_question'].tolist()
 	a_human = f['Best Answer'].tolist()
 	a_chat = f['chatgpt_answer'].tolist()

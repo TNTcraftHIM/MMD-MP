@@ -814,20 +814,30 @@ if __name__ == '__main__':
 
     ## Add extra arguments for the command line for relative testing
     parser.add_argument('--relative_test', action='store_true')
+    parser.add_argument('--relative_test_extra_n_samples', type=int, default=100)
     parser.add_argument('--relative_test_alpha', type=float, default=0.05)
 
     ## Add extra arguments for the command line to determine the plain text to be used for testing the model
+    parser.add_argument('--test_dataset', type=str, default='HC3', help='HC3|SQuAD1|TruthfulQA')
     parser.add_argument('--test_text', type=str, default=None)
     parser.add_argument('--test_text_file', type=str, default=None)
     parser.add_argument('--test_text_split', action='store_true')
+    parser.add_argument('--test_text_n_samples', type=int, default=None)
+    parser.add_argument('--test_text_n_sample_rounds', type=int, default=10)
     args = parser.parse_args()
 
     ## Assert that the metric is either aruoc or power
     assert args.metric in ["power", "auroc"], "metric must be either power or auroc"
 
+    ## Check if test_dataset is set to non HC3 dataset while test_text or test_text_file is not None
+    assert args.test_dataset == 'HC3' or (args.test_text is None and args.test_text_file is None), "test_dataset must not be set or HC3 (default) if test_text or test_text_file is not None"
+
     ## Check if the test_text_file exists
     if args.test_text_file is not None:
         assert os.path.exists(args.test_text_file), "test_text_file does not exist"
+
+    ## test_text_n_samples is only allowed if test_text_split is set to False
+    assert args.test_text_n_samples is None or not args.test_text_split, "test_text_n_samples is only allowed if test_text_split is set to False"
 
     ## Set folder name for saving the model and log to two_sample_test since we're training the model using two sample test
     PATH_exper = 'two_sample_test'
@@ -981,7 +991,18 @@ if __name__ == '__main__':
                                 label == 0]  # 19077[text,text]
 
             else:
-                False, f"Do not surpport on {target_dataset}!"
+                assert False, f"Unsupported dataset {target_dataset}"
+            ## Load the test dataset from the given dataset name, if supported (HC3, TruthfulQA, SQuAD1)
+            print(f'Loading test dataset {args.test_dataset}...')
+            if args.test_dataset in ['TruthfulQA', 'TruthfulQA_adv1', 'TruthfulQA_adv2', 'SQuAD1']:
+                test_o = dataset_loader.load(args.test_dataset, args.cache_dir)
+                test_o = [text for text, label in zip(test_o['test']['text'], test_o['test']['label']) if
+                                label == 1] ## Label = 1: chatgpt_answer, Label = 0: human_answer
+            elif args.test_dataset == 'HC3':
+                pass
+            else:
+                assert False, f"Unsupported test dataset {args.test_dataset}"
+
 
             ## Load the model that the MGTs were generated from
             for text_generated_model_name in args.text_generated_model_name:
@@ -1031,6 +1052,7 @@ if __name__ == '__main__':
                     ## Tokenize the sentences and remove the first and last sentences
                     real_sent_token = [nltk.sent_tokenize(text)[1:-1] for text in real]
                     generated_sent_token = [nltk.sent_tokenize(text)[1:-1] for text in generated]
+                    ## If test_text or test_text_file is provided, load and/or tokenize the text and remove the empty sentences
                     if args.test_text is not None:
                         test_sent_token = [nltk.sent_tokenize(args.test_text)]
                     elif args.test_text_file is not None:
@@ -1041,7 +1063,15 @@ if __name__ == '__main__':
                                 paragraphs = [file.read()]
                         test_sent_token = [nltk.sent_tokenize(text) for text in paragraphs if text.strip()]
                     else:
-                        test_sent_token = [""]
+                        ## If custom test dataset is provided, tokenize the sentences and remove the empty sentences
+                        ## Only for non-HC3 datasets, if HC3, use the regular testing procedure
+                        if args.test_dataset != 'HC3':
+                            if not args.test_text_split:
+                                ## If not to split the text, concatenate the text
+                                test_o = [' '.join(test_o)]
+                            test_sent_token = [nltk.sent_tokenize(text) for text in test_o if text.strip()]
+                        else:
+                            test_sent_token = [""]
                     ## Remove the empty sentences
                     real = [text for text in real_sent_token if len(text) > 0]
                     generated = [text for text in generated_sent_token if len(text) > 0]
@@ -1068,18 +1098,18 @@ if __name__ == '__main__':
                     ## Keep the paragraphs with more than 5 sentences
                     real_data_temp_seletced = [pa_ls for pa_ls in real_data_temp if len(pa_ls) >= 5]
                     generated_data_temp_seletced = [pa_ls for pa_ls in generated_data_temp if len(pa_ls) >= 5]
-                    test_data_temp_seletced = [pa_ls for pa_ls in test_data_temp if len(pa_ls) >= 1]
+                    test_data_temp_seletced = [pa_ls for pa_ls in test_data_temp if len(pa_ls) >= 2]
                     len_data = min(len(real_data_temp_seletced), len(generated_data_temp_seletced))
 
                     test_lenth = 100
-                    if args.test_text is not None or args.test_text_file is not None:
-                        test_lenth = len(test_data_temp)
+                    if args.test_text is not None or args.test_text_file is not None or args.test_dataset != 'HC3':
+                        test_lenth = len(test_data_temp_seletced) + args.relative_test_extra_n_samples
                     ## Check if the length of the remaining data is enough for the required number of sentences
                     assert len_data >= args.val_num + test_lenth + 250, print(
                         f'Please reduce the args.target_senten_num:{args.target_senten_num}')
 
                 else:
-                    False, f"You should choose the way to construct the samples!"
+                    assert False, f"You should choose the way to construct the samples!"
 
                 if args.test_flag:
                     ## If the test flag is set, only use the first 500 sentences for training
@@ -1180,7 +1210,7 @@ if __name__ == '__main__':
         print("val_generated:", len(val_generated))
         print("val_sing_real:", len(val_sing_real))
         print("val_sing_generated:", len(val_sing_generated))
-        if args.test_text is not None or args.test_text_file is not None:
+        if args.test_text is not None or args.test_text_file is not None or args.test_dataset != 'HC3':
             print("fea_test:", len(fea_test))
             print("fea_test_single:", len(fea_test_single))
 
@@ -1275,11 +1305,9 @@ if __name__ == '__main__':
             ## Set the model to evaluation mode
             net.eval()
             ## Cut the real and generated data to the same length (according to the minimum length of the real and generated data)
-            min_len = min(len(fea_real_ls), len(fea_generated_ls)) if not relative_test else min(len(fea_real_ls), len(fea_generated_ls), len(fea_reference_ls))
+            min_len = min(len(fea_real_ls), len(fea_generated_ls))
             fea_real_ls = fea_real_ls[:min_len]
             fea_generated_ls = fea_generated_ls[:min_len]
-            if relative_test and fea_reference_ls:
-                fea_reference_ls = fea_reference_ls[:min_len]
             with torch.no_grad():
 
                 ## Function to get the test power of the real and generated data pairs via N times of MMD test
@@ -1317,42 +1345,53 @@ if __name__ == '__main__':
                     return test_power_ls, mmd_value_ls
 
                 def mmd_three_sample(fea_ref_ls, fea_y_ls, fea_z_ls, N=100):
-                    min_len = min(len(fea_ref_ls), len(fea_y_ls), len(fea_z_ls))
-                    fea_ref_ls = fea_ref_ls[:min_len]
+                    min_len = min(len(fea_y_ls), len(fea_z_ls))
+                    fea_ref_ls_ori = fea_ref_ls
                     fea_y_ls = fea_y_ls[:min_len]
                     fea_z_ls = fea_z_ls[:min_len]
+                    ## Concatenate the hidden states of the real and generated data
+                    fea_y_ls = torch.cat(fea_y_ls, dim=0).to('cuda')
+                    fea_z_ls = torch.cat(fea_z_ls, dim=0).to('cuda')
 
                     p_value_ls = []
                     test_power_ls = []
 
-                    for i in range(len(fea_ref_ls)):
-                        fea_ref_ori = fea_ref_ls[i].to('cuda')
-                        fea_y_ori = fea_y_ls[i].to('cuda')
-                        fea_z_ori = fea_z_ls[i].to('cuda')
+                    for _ in range(args.test_text_n_sample_rounds):
+                        ## If the reference data is not splitted, then randomly sample n samples from the reference data
+                        if not args.test_text_split and len(fea_ref_ls_ori) == 1:
+                            if not args.test_text_n_samples:
+                                args.test_text_n_samples = len(fea_ref_ls_ori[0]) // args.test_text_n_sample_rounds
+                            args.test_text_n_samples = min(args.test_text_n_samples, len(fea_ref_ls_ori[0]))
+                            ## Randomly sample n samples from the reference data tensor
+                            fea_ref_ls = [fea_ref_ls_ori[0][torch.randperm(len(fea_ref_ls_ori[0]))[:args.test_text_n_samples]]]
 
-                        min_len = min(len(fea_ref_ori), len(fea_y_ori), len(fea_z_ori))
-                        fea_ref_ori = fea_ref_ori[:min_len]
-                        fea_y_ori = fea_y_ori[:min_len]
-                        fea_z_ori = fea_z_ori[:min_len]
 
-                        final_x = net(fea_ref_ori)
-                        final_y = net(fea_y_ori)
-                        final_z = net(fea_z_ori)
+                        for i in range(len(fea_ref_ls)):
+                            fea_ref_ori = fea_ref_ls[i].to('cuda')
 
-                        count_u = 0
-                        for _ in range(N):
-                            h_u, p_value = TST_MMD_u_3S(final_x, final_y, final_z, sigma, sigma0_u, ep, args.relative_test_alpha, is_smooth=True)
-                            count_u = count_u + h_u
+                            min_len = min(len(fea_ref_ori), len(fea_y_ls), len(fea_z_ls))
+                            fea_ref_ori = fea_ref_ori[:min_len]
+                            fea_y_ori = fea_y_ls[:min_len]
+                            fea_z_ori = fea_z_ls[:min_len]
 
-                        p_value_ls.append(p_value)
-                        test_power_ls.append(count_u / N)
+                            final_x = net(fea_ref_ori)
+                            final_y = net(fea_y_ori)
+                            final_z = net(fea_z_ori)
+
+                            count_u = 0
+                            for _ in range(N):
+                                h_u, p_value = TST_MMD_u_3S(final_x, final_y, final_z, sigma, sigma0_u, ep, args.relative_test_alpha, is_smooth=True)
+                                count_u = count_u + h_u
+
+                            p_value_ls.append(p_value)
+                            test_power_ls.append(count_u / N)
 
                     return test_power_ls, p_value_ls
 
 
                 if relative_test:
                     ## Get the p_value of the relative test
-                    generated_test_power_ls, p_value_ls= mmd_three_sample(fea_reference_ls, fea_real, fea_generated, N=N)
+                    generated_test_power_ls, p_value_ls= mmd_three_sample(fea_reference_ls, fea_real_ls, fea_generated_ls, N=N)
                     avg_p_value = sum(p_value_ls) / len(p_value_ls)
                     print(f"avg_p_value: {np.round(avg_p_value, 6)}")
                 else:
@@ -1580,14 +1619,19 @@ if __name__ == '__main__':
                 print(f"avg_power: {avg_value(all_power_list)[0]} and std_power: {avg_value(all_power_list)[1]}")
                 print(f"avg_auroc: {avg_value(all_auroc_list)[0]} and std_auroc: {avg_value(all_auroc_list)[1]}")
 
-            if args.test_text is None and args.test_text_file is None:
-                power = two_sample_test(epoch, test_flag=True)
+            if args.test_text is None and args.test_text_file is None and args.test_dataset == 'HC3':
+                if args.relative_test:
+                    power, p_value = two_sample_test(epoch, test_flag=True, return_p_value=True)
+                    relative_test_p_value_list.append(np.round(p_value, 6))
+                else:
+                    power = two_sample_test(epoch, test_flag=True)
                 auroc_value = single_instance_test(epoch, fea_real=val_sing_real, fea_generated=val_sing_generated, test_flag=True)
                 all_power_list.append(np.round(power, 6))
                 all_auroc_list.append(np.round(auroc_value, 6))
                 ## Print the best power and auroc value of the model and the average and standard deviation of the power and auroc value if we're in the last trial
                 if current_trial == args.trial_num:
                     print_auroc_power()
+                    print("avg_p_value:", np.round(sum(relative_test_p_value_list) / len(relative_test_p_value_list), 6)) if args.relative_test else None
             else:
                 ## Assume test text is generated
                 power_genenrated= two_sample_test(epoch, fea_generated_ls=fea_test, test_flag=True, relative_test=False)
@@ -1601,7 +1645,7 @@ if __name__ == '__main__':
                 test_auroc_list_real.append(np.round(auroc_value_real, 6))
                 if args.relative_test:
                     ## Get the relative test p_value
-                    power, p_value = two_sample_test(epoch, fea_real_ls=fea_real, fea_generated_ls=fea_generated, fea_reference_ls=fea_test, test_flag=True, return_p_value=True)
+                    power, p_value = two_sample_test(epoch, fea_reference_ls=fea_test, test_flag=True, return_p_value=True)
                     relative_test_p_value_list.append(np.round(p_value, 6))
                     relative_test_power_list.append(np.round(power, 6))
                     relative_test_result_list.append('real' if p_value > args.relative_test_alpha else 'generated')
