@@ -1356,7 +1356,7 @@ if __name__ == '__main__':
                     p_value_ls = []
                     test_power_ls = []
 
-                    for _ in range(args.test_text_n_sample_rounds):
+                    for _ in range(args.test_text_n_sample_rounds - 1):
                         ## If the reference data is not splitted, then randomly sample n samples from the reference data
                         if not args.test_text_split and len(fea_ref_ls_ori) == 1:
                             if not args.test_text_n_samples:
