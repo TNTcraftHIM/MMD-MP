@@ -1361,7 +1361,7 @@ if __name__ == '__main__':
                         if not args.test_text_split and len(fea_ref_ls_ori) == 1:
                             if not args.test_text_n_samples:
                                 args.test_text_n_samples = len(fea_ref_ls_ori[0]) // args.test_text_n_sample_rounds
-                            args.test_text_n_samples = min(args.test_text_n_samples, len(fea_ref_ls_ori[0]))
+                            args.test_text_n_samples = max(min(args.test_text_n_samples, len(fea_ref_ls_ori[0])), 1)
                             ## Randomly sample n samples from the reference data tensor
                             fea_ref_ls = [fea_ref_ls_ori[0][torch.randperm(len(fea_ref_ls_ori[0]))[:args.test_text_n_samples]]]
 
